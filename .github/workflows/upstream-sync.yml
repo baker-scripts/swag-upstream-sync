@@ -1,0 +1,75 @@
+---
+name: SWAG Upstream Sync
+
+"on":
+  schedule:
+    - cron: "0 9 * * 1"  # Monday 9AM UTC
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: upstream-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    name: Check upstream changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Clone upstream samples
+        # Wipe before clone to make the step idempotent across runs.
+        run: |
+          rm -rf /tmp/upstream
+          git clone --depth 1 https://github.com/linuxserver/reverse-proxy-confs.git /tmp/upstream
+          rm -rf "$RUNNER_TEMP/upstream-swag" "$RUNNER_TEMP/upstream-base"
+          git clone --depth 1 https://github.com/linuxserver/docker-swag.git "$RUNNER_TEMP/upstream-swag"
+          git clone --depth 1 https://github.com/linuxserver/docker-baseimage-alpine-nginx.git "$RUNNER_TEMP/upstream-base"
+
+      - name: Diff enabled configs against upstream
+        id: diff
+        run: |
+          set +e
+          ./scripts/upstream-diff.sh /tmp/upstream --stock-dir "$RUNNER_TEMP/upstream-swag" --stock-dir "$RUNNER_TEMP/upstream-base" > /tmp/upstream-diff.md
+          exit_code=$?
+          set -e
+
+          case $exit_code in
+            0)
+              echo "has_changes=false" >> "$GITHUB_OUTPUT"
+              ;;
+            1)
+              echo "has_changes=true" >> "$GITHUB_OUTPUT"
+              count=$(grep -oP '\*\*(\d+)\*\*' /tmp/upstream-diff.md | head -1 | tr -d '*')
+              echo "count=${count:-0}" >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo "::error::upstream-diff.sh failed with exit code $exit_code"
+              cat /tmp/upstream-diff.md >&2
+              exit 1
+              ;;
+          esac
+
+      - name: Close previous upstream-sync issues
+        if: steps.diff.outputs.has_changes == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh issue list --label upstream-sync --state open --json number -q '.[].number' | while read -r num; do
+            gh issue close "$num" --comment "Superseded by new weekly scan"
+          done
+
+      - name: Create issue
+        if: steps.diff.outputs.has_changes == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh issue create \
+            --title "SWAG upstream changes: ${{ steps.diff.outputs.count }} config(s) need review ($(date +%Y-%m-%d))" \
+            --body-file /tmp/upstream-diff.md \
+            --label "upstream-sync"
