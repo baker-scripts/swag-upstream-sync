@@ -17,6 +17,8 @@ concurrency:
 jobs:
   sync:
     name: Check upstream changes
+    # The template repo ships no configs; only forks/copies have anything to diff.
+    if: github.repository != 'baker-scripts/swag-upstream-sync'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

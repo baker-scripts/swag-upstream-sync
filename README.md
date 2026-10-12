@@ -43,7 +43,7 @@ are matched to the upstream `<app>.subdomain.conf.sample`.
 
 `.github/workflows/upstream-sync.yml` runs every Monday at 09:00 UTC and on manual dispatch. It clones the
 upstream repos, runs the script from the repository root, closes older open issues labeled `upstream-sync`,
-and opens a new one. Create the `upstream-sync` label before the first run, and put your configs in the
+and opens a new one. The job is skipped in `baker-scripts/swag-upstream-sync` itself, which has no configs. Create the `upstream-sync` label before the first run, and put your configs in the
 repository so `--config-dir` (default `.`) finds them.
 
 ## Limits
