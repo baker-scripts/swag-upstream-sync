@@ -1,6 +1,8 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
-    "config:recommended"
-  ]
+    "config:recommended",
+    "github>baker-scripts/.github:renovate-automerge"
+  ],
+  "platformAutomerge": false
 }
